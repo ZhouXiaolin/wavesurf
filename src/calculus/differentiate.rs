@@ -1,7 +1,11 @@
 use crate::Expression;
 
-impl Expression {
-    pub fn differentiate(&self, var: &str) -> Expression {
+pub trait Differentiate {
+    fn differentiate(&self, var: &str) -> Expression;
+}
+
+impl Differentiate for Expression {
+    fn differentiate(&self, var: &str) -> Expression {
         match self {
             Expression::Constant(_) => Expression::constant(0.0),
             Expression::Variable(name) => {

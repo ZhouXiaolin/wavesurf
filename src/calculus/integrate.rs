@@ -1,22 +1,56 @@
 use crate::Expression;
 use super::IntegrationError;
 use super::integration_rules::IntegrationTable;
+use super::integration_state::{IntegrationState, IntegrationMethod};
+use super::differentiate::Differentiate;
 use lazy_static::lazy_static;
+
+type IntegrationFn = Box<dyn Fn(&Expression, &str, &mut IntegrationState) -> Result<Expression, IntegrationError>>;
+
 lazy_static! {
     static ref INTEGRATION_TABLE: IntegrationTable = IntegrationTable::new();
 }
 
 impl Expression {
     pub fn integrate(&self, var: &str) -> Result<Expression, IntegrationError> {
-        // First try to find a matching rule in the integration table
+        let mut state = IntegrationState::new(5); // 默认最大深度为5
+        self.integrate_with_state(var, &mut state)
+    }
+
+    pub fn integrate_with_state(&self, var: &str, state: &mut IntegrationState) -> Result<Expression, IntegrationError> {
+        if state.should_prune(self) {
+            return Err(IntegrationError::MaxDepthExceeded);
+        }
+
+        // 首先尝试使用积分表
         if let Some(result) = INTEGRATION_TABLE.lookup(self, var) {
             return result;
         }
 
-        // If no rule matches, fall back to the existing integration logic
+        // 尝试各种积分方法
+        let methods: [(IntegrationMethod, IntegrationFn); 3] = [
+            (IntegrationMethod::Direct, Box::new(|expr, v, s| expr.try_direct_integration(v, s))),
+            (IntegrationMethod::ByParts, Box::new(|expr, v, s| expr.try_integration_by_parts(v, s))),
+            (IntegrationMethod::Substitution, Box::new(|expr, v, s| expr.try_substitution(v, s))),
+        ];
+
+        for (method, integration_fn) in methods.iter() {
+            let prev_method = state.get_method();
+            state.set_method(method.clone());
+            
+            if let Ok(result) = integration_fn(self, var, state) {
+                return Ok(result);
+            }
+            
+            state.set_method(prev_method);
+        }
+
+        Err(IntegrationError::NoMethodFound)
+    }
+
+    fn try_direct_integration(&self, var: &str, _state: &mut IntegrationState) -> Result<Expression, IntegrationError> {
         match self {
             Expression::Constant(c) => {
-                // ∫c dx = cx
                 Ok(Expression::multiply(
                     Expression::constant(*c),
                     Expression::variable(var),
@@ -24,7 +58,6 @@ impl Expression {
             }
             Expression::Variable(name) => {
                 if name == var {
-                    // ∫x dx = x²/2
                     Ok(Expression::divide(
                         Expression::power(
                             Expression::variable(var),
@@ -33,7 +66,6 @@ impl Expression {
                         Expression::constant(2.0),
                     ))
                 } else {
-                    // ∫c dx = cx where c is another variable
                     Ok(Expression::multiply(
                         Expression::variable(name),
                         Expression::variable(var),
@@ -41,176 +73,85 @@ impl Expression {
                 }
             }
             Expression::Add(left, right) => {
-                // ∫(f + g) dx = ∫f dx + ∫g dx
-                let left_int = (**left).clone().integrate(var)?;
-                let right_int = (**right).clone().integrate(var)?;
+                let left_int = (**left).clone().integrate_with_state(var, _state)?;
+                let right_int = (**right).clone().integrate_with_state(var, _state)?;
                 Ok(Expression::add(left_int, right_int))
             }
             Expression::Subtract(left, right) => {
-                // ∫(f - g) dx = ∫f dx - ∫g dx
-                let left_int = (**left).clone().integrate(var)?;
-                let right_int = (**right).clone().integrate(var)?;
+                let left_int = (**left).clone().integrate_with_state(var, _state)?;
+                let right_int = (**right).clone().integrate_with_state(var, _state)?;
                 Ok(Expression::subtract(left_int, right_int))
             }
+            _ => Err(IntegrationError::NoMethodFound),
+        }
+    }
+
+    fn try_integration_by_parts(&self, var: &str, state: &mut IntegrationState) -> Result<Expression, IntegrationError> {
+        state.push_expression(self.clone());
+        
+        match self {
             Expression::Multiply(left, right) => {
-                match (&**left, &**right) {
-                    (Expression::Constant(c), expr) | (expr, Expression::Constant(c)) => {
-                        // ∫c*f dx = c*∫f dx
-                        let int = expr.integrate(var)?;
-                        Ok(Expression::multiply(Expression::constant(*c), int))
-                    }
-                    (Expression::Variable(name), Expression::Variable(name2)) if name == name2 => {
-                        // ∫x² dx = x³/3
-                        if name == var {
-                            Ok(Expression::divide(
-                                Expression::power(
-                                    Expression::variable(name),
-                                    Expression::constant(3.0)
-                                ),
-                                Expression::constant(3.0)
-                            ))
-                        } else {
-                            Err(IntegrationError("Cannot integrate this product".to_string()))
-                        }
-                    }
-                    _ => Err(IntegrationError("Integration of general products not implemented".to_string()))
-                }
+                let (u, dv) = self.choose_u_dv(left, right)?;
+                
+                // 计算du
+                let du = u.differentiate(var);
+                
+                // 计算v (∫dv)
+                let v = dv.integrate_with_state(var, state)?;
+                
+                // 计算∫v·du
+                let v_du = Expression::multiply(v.clone(), du);
+                let v_du_int = v_du.integrate_with_state(var, state)?;
+                
+                // 最终结果：u·v - ∫v·du
+                let result = Expression::subtract(
+                    Expression::multiply(u, v),
+                    v_du_int
+                );
+                
+                state.pop_expression();
+                Ok(result)
             }
-            Expression::Power(base, exponent) => {
-                match (&**base, &**exponent) {
-                    (Expression::Variable(name), Expression::Constant(n)) if name == var => {
-                        // ∫x^n dx = x^(n+1)/(n+1) for n ≠ -1
-                        if (n - (-1.0)).abs() > 1e-10 {
-                            Ok(Expression::divide(
-                                Expression::power(
-                                    Expression::variable(var),
-                                    Expression::constant(n + 1.0),
-                                ),
-                                Expression::constant(n + 1.0),
-                            ))
-                        } else {
-                            // ∫x^(-1) dx = ln|x|
-                            Ok(Expression::ln(Expression::variable(var)))
-                        }
-                    }
-                    _ => {
-                        Err(IntegrationError("Integration of general powers not implemented".to_string()))
-                    }
-                }
+            _ => {
+                state.pop_expression();
+                Err(IntegrationError::NoMethodFound)
             }
-            Expression::Root(base, n) => {
-                // Convert root to power and integrate
-                let power = Expression::divide(Expression::constant(1.0), (**n).clone());
-                Expression::power((**base).clone(), power).integrate(var)
-            }
-            Expression::Divide(num, den) => {
-                match (&**den, &**num) {
-                    // ∫ 1/x dx = ln|x| + C
-                    (Expression::Variable(v), Expression::Constant(c)) if *c == 1.0 && v == var => {
-                        Ok(Expression::multiply(
-                            Expression::constant(1.0),
-                            Expression::ln(Expression::variable(var))
-                        ))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate this division".to_string()))
-                }
-            }
-            Expression::Sin(expr) => {
-                match &**expr {
-                    // ∫ sin(x) dx = -cos(x) + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::multiply(
-                            Expression::constant(-1.0),
-                            Expression::cos(Expression::variable(var))
-                        ))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate sin of complex expression".to_string()))
-                }
-            }
-            Expression::Cos(expr) => {
-                match &**expr {
-                    // ∫ cos(x) dx = sin(x) + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::sin(Expression::variable(var)))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate cos of complex expression".to_string()))
-                }
-            }
-            Expression::Tan(expr) => {
-                match &**expr {
-                    // ∫ tan(x) dx = -ln|cos(x)| + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::multiply(
-                            Expression::constant(-1.0),
-                            Expression::ln(Expression::cos(Expression::variable(var)))
-                        ))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate tan of complex expression".to_string()))
-                }
-            }
-            Expression::Exp(expr) => {
-                match &**expr {
-                    // ∫ e^x dx = e^x + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::exp(Expression::variable(var)))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate exp of complex expression".to_string()))
-                }
-            }
-            Expression::Ln(expr) => {
-                match &**expr {
-                    // ∫ ln(x) dx = x*ln(x) - x + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::subtract(
-                            Expression::multiply(
-                                Expression::variable(var),
-                                Expression::ln(Expression::variable(var))
-                            ),
-                            Expression::variable(var)
-                        ))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate ln of complex expression".to_string()))
-                }
-            }
-            Expression::Arcsin(_expr) => {
-                Err(IntegrationError("Integration of arcsin not implemented".to_string()))
-            }
-            Expression::Arccos(_expr) => {
-                Err(IntegrationError("Integration of arccos not implemented".to_string()))
-            }
-            Expression::Arctan(_expr) => {
-                Err(IntegrationError("Integration of arctan not implemented".to_string()))
-            }
-            Expression::Log(_base, _expr) => {
-                Err(IntegrationError("Integration of logarithm with arbitrary base not implemented".to_string()))
-            }
-            Expression::Sinh(expr) => {
-                match &**expr {
-                    // ∫ sinh(x) dx = cosh(x) + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::cosh(Expression::variable(var)))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate sinh of complex expression".to_string()))
-                }
-            }
-            Expression::Cosh(expr) => {
-                match &**expr {
-                    // ∫ cosh(x) dx = sinh(x) + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::sinh(Expression::variable(var)))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate cosh of complex expression".to_string()))
-                }
-            }
-            Expression::Tanh(expr) => {
-                match &**expr {
-                    // ∫ tanh(x) dx = ln(cosh(x)) + C
-                    Expression::Variable(v) if v == var => {
-                        Ok(Expression::ln(Expression::cosh(Expression::variable(var))))
-                    }
-                    _ => Err(IntegrationError("Cannot integrate tanh of complex expression".to_string()))
-                }
-            }
+        }
+    }
+
+    fn try_substitution(&self, _var: &str, _state: &mut IntegrationState) -> Result<Expression, IntegrationError> {
+        // TODO: 实现替换积分
+        // 使用 _var 和 _state 来避免未使用变量警告
+        let _ = _var;
+        let _ = _state;
+        Err(IntegrationError::NotImplemented)
+    }
+
+    fn choose_u_dv(&self, left: &Expression, right: &Expression) -> Result<(Expression, Expression), IntegrationError> {
+        // 评估哪个部分更适合作为u
+        let left_score = self.get_integration_difficulty_score(left);
+        let right_score = self.get_integration_difficulty_score(right);
+        
+        if left_score <= right_score {
+            Ok((left.clone(), right.clone()))
+        } else {
+            Ok((right.clone(), left.clone()))
+        }
+    }
+
+    fn get_integration_difficulty_score(&self, expr: &Expression) -> i32 {
+        match expr {
+            Expression::Constant(_) => 1,
+            Expression::Variable(_) => 2,
+            Expression::Add(_, _) | Expression::Subtract(_, _) => 3,
+            Expression::Multiply(_, _) => 4,
+            Expression::Divide(_, _) => 5,
+            Expression::Power(_, _) => 6,
+            Expression::Ln(_) => 7,
+            Expression::Sin(_) | Expression::Cos(_) => 4,
+            Expression::Tan(_) => 5,
+            Expression::Exp(_) => 4,
+            _ => 10,
         }
     }
 }

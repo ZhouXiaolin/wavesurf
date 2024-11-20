@@ -1,4 +1,5 @@
 use wavesurf::ExpressionParser;
+use wavesurf::calculus::Differentiate;
 
 fn test_expression(expr: &str) {
     println!("\nTesting expression: {}", expr);

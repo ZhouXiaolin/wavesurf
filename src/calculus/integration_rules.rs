@@ -103,15 +103,13 @@ impl IntegrationTable {
         None
     }
 
-    fn matches(&self, pattern: &Expression, expr: &Expression, var: &str) -> bool {
-        // TODO: Implement pattern matching logic
-        // This should check if the expression matches the pattern, considering variable substitutions
+    fn matches(&self, _pattern: &Expression, _expr: &Expression, _var: &str) -> bool {
+        // TODO: 实现模式匹配
         false
     }
 
-    fn apply_rule(&self, result: &Expression, expr: &Expression, var: &str) -> Expression {
-        // TODO: Implement rule application logic
-        // This should apply the rule template to the specific expression
+    fn apply_rule(&self, result: &Expression, _expr: &Expression, _var: &str) -> Expression {
+        // TODO: 实现规则应用
         result.clone()
     }
 }
