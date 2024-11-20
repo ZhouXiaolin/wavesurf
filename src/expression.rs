@@ -10,6 +10,26 @@ pub enum Expression {
     Divide(Box<Expression>, Box<Expression>),
     Power(Box<Expression>, Box<Expression>),
     Root(Box<Expression>, Box<Expression>),
+    
+    // 三角函数
+    Sin(Box<Expression>),
+    Cos(Box<Expression>),
+    Tan(Box<Expression>),
+    
+    // 反三角函数
+    Arcsin(Box<Expression>),
+    Arccos(Box<Expression>),
+    Arctan(Box<Expression>),
+    
+    // 指数和对数
+    Exp(Box<Expression>),  // e^x
+    Ln(Box<Expression>),   // 自然对数
+    Log(Box<Expression>, Box<Expression>), // 任意底数的对数，第二个参数是底数
+    
+    // 双曲函数
+    Sinh(Box<Expression>),
+    Cosh(Box<Expression>),
+    Tanh(Box<Expression>),
 }
 
 impl Expression {
@@ -46,7 +66,51 @@ impl Expression {
     }
 
     pub fn ln(expr: Expression) -> Expression {
-        Expression::power(expr, Expression::constant(-1.0))
+        Expression::Ln(Box::new(expr))
+    }
+
+    pub fn sin(expr: Expression) -> Expression {
+        Expression::Sin(Box::new(expr))
+    }
+
+    pub fn cos(expr: Expression) -> Expression {
+        Expression::Cos(Box::new(expr))
+    }
+
+    pub fn tan(expr: Expression) -> Expression {
+        Expression::Tan(Box::new(expr))
+    }
+
+    pub fn arcsin(expr: Expression) -> Expression {
+        Expression::Arcsin(Box::new(expr))
+    }
+
+    pub fn arccos(expr: Expression) -> Expression {
+        Expression::Arccos(Box::new(expr))
+    }
+
+    pub fn arctan(expr: Expression) -> Expression {
+        Expression::Arctan(Box::new(expr))
+    }
+
+    pub fn exp(expr: Expression) -> Expression {
+        Expression::Exp(Box::new(expr))
+    }
+
+    pub fn log(base: Expression, expr: Expression) -> Expression {
+        Expression::Log(Box::new(base), Box::new(expr))
+    }
+
+    pub fn sinh(expr: Expression) -> Expression {
+        Expression::Sinh(Box::new(expr))
+    }
+
+    pub fn cosh(expr: Expression) -> Expression {
+        Expression::Cosh(Box::new(expr))
+    }
+
+    pub fn tanh(expr: Expression) -> Expression {
+        Expression::Tanh(Box::new(expr))
     }
 }
 
@@ -133,6 +197,42 @@ impl fmt::Display for Expression {
             }
             Expression::Root(base, n) => {
                 write!(f, "√[{}]({})", n, base)
+            }
+            Expression::Sin(expr) => {
+                write!(f, "sin({})", expr)
+            }
+            Expression::Cos(expr) => {
+                write!(f, "cos({})", expr)
+            }
+            Expression::Tan(expr) => {
+                write!(f, "tan({})", expr)
+            }
+            Expression::Arcsin(expr) => {
+                write!(f, "arcsin({})", expr)
+            }
+            Expression::Arccos(expr) => {
+                write!(f, "arccos({})", expr)
+            }
+            Expression::Arctan(expr) => {
+                write!(f, "arctan({})", expr)
+            }
+            Expression::Exp(expr) => {
+                write!(f, "exp({})", expr)
+            }
+            Expression::Ln(expr) => {
+                write!(f, "ln({})", expr)
+            }
+            Expression::Log(base, expr) => {
+                write!(f, "log[{}]({})", base, expr)
+            }
+            Expression::Sinh(expr) => {
+                write!(f, "sinh({})", expr)
+            }
+            Expression::Cosh(expr) => {
+                write!(f, "cosh({})", expr)
+            }
+            Expression::Tanh(expr) => {
+                write!(f, "tanh({})", expr)
             }
         }
     }

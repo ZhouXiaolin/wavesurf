@@ -119,6 +119,138 @@ impl Expression {
                     )
                 ).simplify()
             }
+            Expression::Sin(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // sin(0) = 0
+                        else { Expression::sin(simplified) }
+                    }
+                    _ => Expression::sin(simplified)
+                }
+            }
+            Expression::Cos(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(1.0) }  // cos(0) = 1
+                        else { Expression::cos(simplified) }
+                    }
+                    _ => Expression::cos(simplified)
+                }
+            }
+            Expression::Tan(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // tan(0) = 0
+                        else { Expression::tan(simplified) }
+                    }
+                    _ => Expression::tan(simplified)
+                }
+            }
+            Expression::Arcsin(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // arcsin(0) = 0
+                        else if x == 1.0 { Expression::constant(std::f64::consts::PI / 2.0) }  // arcsin(1) = π/2
+                        else if x == -1.0 { Expression::constant(-std::f64::consts::PI / 2.0) }  // arcsin(-1) = -π/2
+                        else { Expression::arcsin(simplified) }
+                    }
+                    _ => Expression::arcsin(simplified)
+                }
+            }
+            Expression::Arccos(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 1.0 { Expression::constant(0.0) }  // arccos(1) = 0
+                        else if x == -1.0 { Expression::constant(std::f64::consts::PI) }  // arccos(-1) = π
+                        else if x == 0.0 { Expression::constant(std::f64::consts::PI / 2.0) }  // arccos(0) = π/2
+                        else { Expression::arccos(simplified) }
+                    }
+                    _ => Expression::arccos(simplified)
+                }
+            }
+            Expression::Arctan(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // arctan(0) = 0
+                        else if x == 1.0 { Expression::constant(std::f64::consts::PI / 4.0) }  // arctan(1) = π/4
+                        else if x == -1.0 { Expression::constant(-std::f64::consts::PI / 4.0) }  // arctan(-1) = -π/4
+                        else { Expression::arctan(simplified) }
+                    }
+                    _ => Expression::arctan(simplified)
+                }
+            }
+            Expression::Exp(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(1.0) }  // e^0 = 1
+                        else if x == 1.0 { Expression::constant(std::f64::consts::E) }  // e^1 = e
+                        else { Expression::exp(simplified) }
+                    }
+                    Expression::Ln(inner) => inner.simplify(),  // e^(ln(x)) = x
+                    _ => Expression::exp(simplified)
+                }
+            }
+            Expression::Ln(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 1.0 { Expression::constant(0.0) }  // ln(1) = 0
+                        else if x == std::f64::consts::E { Expression::constant(1.0) }  // ln(e) = 1
+                        else { Expression::ln(simplified) }
+                    }
+                    Expression::Exp(inner) => inner.simplify(),  // ln(e^x) = x
+                    _ => Expression::ln(simplified)
+                }
+            }
+            Expression::Log(base, expr) => {
+                let simplified_base = base.simplify();
+                let simplified_expr = expr.simplify();
+                match (simplified_base, simplified_expr) {
+                    (Expression::Constant(b), Expression::Constant(x)) => {
+                        if x == 1.0 { Expression::constant(0.0) }  // log_b(1) = 0
+                        else if x == b { Expression::constant(1.0) }  // log_b(b) = 1
+                        else { Expression::log(Expression::constant(b), Expression::constant(x)) }
+                    }
+                    (a,b) => Expression::log(a, b)
+                }
+            }
+            Expression::Sinh(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // sinh(0) = 0
+                        else { Expression::sinh(simplified) }
+                    }
+                    _ => Expression::sinh(simplified)
+                }
+            }
+            Expression::Cosh(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(1.0) }  // cosh(0) = 1
+                        else { Expression::cosh(simplified) }
+                    }
+                    _ => Expression::cosh(simplified)
+                }
+            }
+            Expression::Tanh(expr) => {
+                let simplified = expr.simplify();
+                match simplified {
+                    Expression::Constant(x) => {
+                        if x == 0.0 { Expression::constant(0.0) }  // tanh(0) = 0
+                        else { Expression::tanh(simplified) }
+                    }
+                    _ => Expression::tanh(simplified)
+                }
+            }
         }
     }
 }
