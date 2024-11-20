@@ -1,9 +1,19 @@
 use crate::Expression;
-
 use super::IntegrationError;
+use super::integration_rules::IntegrationTable;
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref INTEGRATION_TABLE: IntegrationTable = IntegrationTable::new();
+}
 
 impl Expression {
     pub fn integrate(&self, var: &str) -> Result<Expression, IntegrationError> {
+        // First try to find a matching rule in the integration table
+        if let Some(result) = INTEGRATION_TABLE.lookup(self, var) {
+            return result;
+        }
+
+        // If no rule matches, fall back to the existing integration logic
         match self {
             Expression::Constant(c) => {
                 // ∫c dx = cx

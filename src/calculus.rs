@@ -1,5 +1,6 @@
 mod differentiate;
 mod integrate;
+mod integration_rules;
 use std::error::Error;
 use std::fmt;
 #[derive(Debug)]
